@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 import js
 from py_html.elements import *
-from py_html.macros.components import *
-from py_html.macros.layouts import *
-from py_html.macros.forms import *
-from py_html.macros.ui import *
 from py_html.css import CSS
-import include
 from pyodide.ffi import create_proxy
+from sci_ux_components import NavItem, navbar, get_navbar_css
+from home import create_home_content, setup_home_event_handlers
+from about import create_about_content
 
 def create_styles():
+    # Include navbar styles
+    navbar_css = get_navbar_css()
+    
     return "\n".join(str(style) for style in [
+        navbar_css.to_css(),
         CSS.class_("app-container",
             max_width="1200px",
             margin="0 auto", 
@@ -74,321 +76,89 @@ def create_styles():
         )
     ] if str(style))
 
-def create_main_page():
-    return Html(lang="en").add(
-        Head().add(
-            Meta(charset="utf-8"),
-            Meta(name="viewport", content="width=device-width, initial-scale=1"),
-            Title("Python UX Application"),
-            Style(create_styles())
-        ),
-        Body().add(
-            Div(class_="app-container").add(
-                # Hero section
-                Div(class_="hero").add(
-                    H1("Welcome to Python UX Application"),
-                    P("A modern web application built with Python and py_html")
-                ),
-                include.hi(),
-                Div(class_="feature-grid").add(
-                    card(
-                        title="HTML Generation",
-                        content=P("Generate clean, semantic HTML using Python code with a fluent API."),
-                        footer=Button("Learn More", class_="btn-primary", id="btn-html")
-                    ),
-                    card(
-                        title="CSS Styling", 
-                        content=P("Create beautiful styles with Python, no separate CSS files needed."),
-                        footer=Button("Learn More", class_="btn-primary", id="btn-css")
-                    ),
-                    card(
-                        title="Interactive Components",
-                        content=P("Build interactive UIs with forms, modals, and dynamic content."),
-                        footer=Button("Learn More", class_="btn-primary", id="btn-interactive")
-                    )
-                ),
-                Div(class_="form-section").add(
-                    H2("Try it out!"),
-                    contact_form(action="#", method="post")
-                ),
-                Div(class_="demo-section").add(
-                    H2("Interactive Demo"),
-                    Div(class_="demo-content").add(
-                        P("This is a demonstration of the py_html library capabilities."),
-                        P("You can create interactive web applications using Python!")
-                    )
-                ),
-                Footer().add(
-                    Div(class_="footer").add(
-                        P("Built with py_html library"),
-                        P("© 2024 Python UX Application")
-                    )
-                )
-            )
-        )
-    )
+def create_navbar():
+    """Create the navigation bar with consistent structure."""
+    return navbar([
+        NavItem("Home", "home"),
+        NavItem("About", "about"),
+        NavItem("Features", "#", children=[
+            NavItem("HTML Generation", "home"),
+            NavItem("CSS Styling", "home"),
+            NavItem("Interactive Components", "home")
+        ]),
+        NavItem("Documentation", "#", children=[
+            NavItem("Getting Started", "home"),
+            NavItem("API Reference", "home"),
+            NavItem("Examples", "about")
+        ]),
+        NavItem("Contact", "about")
+    ])
 
-def render_to_dom():
+
+def render_page_content(page_content):
+    """Render page content with navbar to the DOM."""
     try:
-        page = create_main_page()
-        html_content = str(page)
-        content_div = js.document.getElementById('content')
-        if content_div:
-            content_div.innerHTML = html_content
-        else:
-            js.document.body.innerHTML = html_content
+        # Ensure styles are in the head
+        if not js.document.getElementById('app-styles'):
+            style_element = f'<style id="app-styles">{create_styles()}</style>'
+            js.document.head.insertAdjacentHTML('beforeend', style_element)
+        
+        # Create the complete page structure
+        full_content = Div().add(
+            create_navbar(),
+            page_content
+        )
+        
+        # Render to DOM
+        html_content = str(full_content)
+        js.document.body.innerHTML = html_content
+        
+        # Re-setup event handlers after page change
         setup_event_handlers()
             
     except Exception as e:
         print(f"Error rendering page: {e}")
         # Fallback content
-        content_div = js.document.getElementById('content')
-        if content_div:
-            content_div.innerHTML = Div(style="padding: 20px; text-align: center;").add(
-                H1("Python UX Application"),
-                P("Application loaded successfully!"),
-                P(f"Error: {e}", style="color: red;")
-            )
+        js.document.body.innerHTML = str(Div(style="padding: 20px; text-align: center;").add(
+            H1("Error Loading Page"),
+            P("Application encountered an error!"),
+            P(f"Error: {e}", style="color: red;")
+        ))
+
+def render_home():
+    """Render the home page content."""
+    home_content = create_home_content()
+    render_page_content(home_content)
+    # Set up home-specific event handlers with a small delay to ensure DOM is ready
+    home_handler_proxy = create_proxy(setup_home_event_handlers)
+    js.setTimeout(home_handler_proxy, 50)
+
+def render_about():
+    """Render the about page content."""
+    about_content = create_about_content()
+    render_page_content(about_content)
 
 
 def setup_event_handlers():
     
-    def handle_html_click(event):
-        show_feature('html')
+    def handle_nav_click(event):
+        if event.target.classList.contains('spa-link'):
+            event.preventDefault()
+            page = event.target.getAttribute('data-page')
+            if page == 'home':
+                render_home()
+            elif page == 'about':
+                render_about()
     
-    def handle_css_click(event):
-        show_feature('css')
+    # Create proxies
+    nav_handler = create_proxy(handle_nav_click)
     
-    def handle_interactive_click(event):
-        show_feature('interactive')
-    
-    html_handler = create_proxy(handle_html_click)
-    css_handler = create_proxy(handle_css_click)
-    interactive_handler = create_proxy(handle_interactive_click)
-    html_btn = js.document.getElementById('btn-html')
-    if html_btn:
-        html_btn.addEventListener('click', html_handler)
-    css_btn = js.document.getElementById('btn-css')
-    if css_btn:
-        css_btn.addEventListener('click', css_handler)
-    interactive_btn = js.document.getElementById('btn-interactive')
-    if interactive_btn:
-        interactive_btn.addEventListener('click', interactive_handler)
+    # Set up navigation handlers
+    nav_links = js.document.querySelectorAll('.spa-link')
+    for link in nav_links:
+        link.addEventListener('click', nav_handler)
 
-def create_modal_styles():
-    return [
-        CSS.class_("modal-overlay",
-            position="fixed",
-            top="0",
-            left="0", 
-            width="100%",
-            height="100%",
-            background="rgba(0,0,0,0.8)",
-            display="flex",
-            justify_content="center",
-            align_items="center",
-            z_index="1000"
-        ),
-        CSS.class_("modal-content",
-            background="white",
-            padding="30px",
-            border_radius="10px",
-            max_width="600px",
-            max_height="80vh",
-            overflow_y="auto",
-            box_shadow="0 10px 30px rgba(0,0,0,0.3)"
-        ),
-        CSS.class_("modal-header",
-            display="flex",
-            justify_content="space-between",
-            align_items="center",
-            margin_bottom="20px"
-        ),
-        CSS.class_("modal-title",
-            margin="0",
-            color="#333"
-        ),
-        CSS.class_("modal-close",
-            background="none",
-            border="none",
-            font_size="24px",
-            cursor="pointer",
-            color="#666"
-        ),
-        CSS.class_("modal-description",
-            color="#666",
-            font_size="16px",
-            line_height="1.5"
-        ),
-        CSS.class_("modal-section-title",
-            color="#333",
-            margin_top="25px"
-        ),
-        CSS.class_("modal-features-list",
-            color="#555",
-            line_height="1.6"
-        ),
-        CSS.class_("modal-code-example",
-            background="#f8f9fa",
-            padding="15px",
-            border_radius="5px",
-            overflow_x="auto",
-            border_left="4px solid #667eea"
-        ),
-        CSS.class_("modal-footer",
-            text_align="right",
-            margin_top="25px"
-        ),
-        CSS.class_("modal-button",
-            background="#667eea",
-            color="white",
-            padding="10px 20px",
-            border="none",
-            border_radius="5px",
-            cursor="pointer",
-            font_size="14px"
-        )
-    ]
-
-def create_modal(feature_info):
-    return Div(class_="modal-overlay", id="feature-modal").add(
-        Div(class_="modal-content").add(
-            Div(class_="modal-header").add(
-                H2(feature_info['title'], class_="modal-title"),
-                Button("×", class_="modal-close", id="modal-close-btn")
-            ),
-            P(feature_info['description'], class_="modal-description"),
-            H3("Key Features:", class_="modal-section-title"),
-            Ul(class_="modal-features-list").add(
-                *[Li(detail) for detail in feature_info['details']]
-            ),
-            H3("Example:", class_="modal-section-title"),
-            Pre(
-                Code(feature_info['code_example'].strip()), 
-                class_="modal-code-example"
-            ),
-            Div(class_="modal-footer").add(
-                Button("Got it!", class_="modal-button", id="modal-got-it-btn")
-            )
-        )
-    )
-
-def show_feature(feature_type):
-    """Show detailed information about a feature."""
-    
-    # Feature information
-    features = {
-        'html': {
-            'title': 'HTML Generation',
-            'description': 'Generate clean, semantic HTML using Python code with a fluent API.',
-            'details': [
-                'Create HTML elements with Python classes',
-                'Method chaining for building complex structures',
-                'Automatic attribute handling and validation',
-                'Support for all HTML5 elements',
-                'Clean, readable Python code'
-            ],
-            'code_example': '''
-# Create a card with py_html
-card_element = Div(class_="card")
-card_element.add(
-    H3("Card Title"),
-    P("Card content goes here"),
-    Button("Click me", class_="btn")
-)
-'''
-        },
-        'css': {
-            'title': 'CSS Styling',
-            'description': 'Create beautiful styles with Python, no separate CSS files needed.',
-            'details': [
-                'Inline styles with Python dictionaries',
-                'CSS classes generated programmatically',
-                'Style objects for reusable styling',
-                'Dynamic style generation',
-                'Integration with popular CSS frameworks'
-            ],
-            'code_example': '''
-# Add styles with py_html CSS module
-from py_html.css import CSS
-
-# Create CSS rules with Python
-my_style = CSS.class_("my-class",
-    background="linear-gradient(45deg, #blue, #purple)",
-    padding="20px",
-    border_radius="8px"
-)
-
-# Add to Style element
-head.add(Style(str(my_style)))
-'''
-        },
-        'interactive': {
-            'title': 'Interactive Components',
-            'description': 'Build interactive UIs with forms, modals, and dynamic content.',
-            'details': [
-                'Form components with validation',
-                'Modal dialogs and overlays',
-                'Dynamic content updates',
-                'Event handling integration',
-                'State management helpers'
-            ],
-            'code_example': '''
-# Create interactive form
-form = contact_form(
-    action="/submit",
-    method="post"
-)
-form.add_validation("email", "required|email")
-'''
-        }
-    }
-    
-    feature_info = features.get(feature_type, features['html'])
-    modal = create_modal(feature_info)
-    if not js.document.getElementById('modal-styles'):
-        modal_styles = create_modal_styles()
-        style_content = "\n".join(str(style) for style in modal_styles)
-        style_element = f'<style id="modal-styles">{style_content}</style>'
-        js.document.head.insertAdjacentHTML('beforeend', style_element)
-    js.document.body.insertAdjacentHTML('beforeend', str(modal))
-    setup_modal_handlers()
-
-def setup_modal_handlers():
-
-    def close_modal(event):
-        modal = js.document.getElementById('feature-modal')
-        if modal:
-            modal.remove()
-    
-    def handle_overlay_click(event):
-        if event.target.id == 'feature-modal':
-            close_modal(event)
-    
-    def handle_escape_key(event):
-        if event.key == 'Escape':
-            close_modal(event)
-    
-    # Create proxies for event handlers
-    close_handler = create_proxy(close_modal)
-    overlay_handler = create_proxy(handle_overlay_click)
-    escape_handler = create_proxy(handle_escape_key)
-    
-    # Add event listeners
-    close_btn = js.document.getElementById('modal-close-btn')
-    if close_btn:
-        close_btn.addEventListener('click', close_handler)
-    
-    got_it_btn = js.document.getElementById('modal-got-it-btn')
-    if got_it_btn:
-        got_it_btn.addEventListener('click', close_handler)
-    
-    modal = js.document.getElementById('feature-modal')
-    if modal:
-        modal.addEventListener('click', overlay_handler)
-    
-    js.document.addEventListener('keydown', escape_handler)
 
 # Main execution
 if __name__ == "__main__":
-    render_to_dom()
+    render_home()

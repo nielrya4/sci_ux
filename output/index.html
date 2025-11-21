@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home - PyHTML App</title>
+    <title>Python UX Application</title>
     <script src="pyodide/pyodide.js"></script>
     <style>
         body {
@@ -58,10 +58,16 @@
                 // Load and mount py_html module files
                 const pyHtmlFiles = ['py_html/environment.py', 'py_html/elements.py', 'py_html/setup.py', 'py_html/css.py', 'py_html/__init__.py', 'py_html/styles/framework.py', 'py_html/styles/__init__.py', 'py_html/macros/custom_layouts.py', 'py_html/macros/ui.py', 'py_html/macros/custom_examples.py', 'py_html/macros/components.py', 'py_html/macros/examples.py', 'py_html/macros/custom_ui.py', 'py_html/macros/__init__.py', 'py_html/macros/layouts.py', 'py_html/macros/forms.py', 'py_html/macros/custom_forms.py'];
                 
+                // Load and mount py_dom module files
+                const pyDomFiles = ['py_dom/events.py', 'py_dom/__init__.py'];
+                
                 // Create py_html module structure in Pyodide
                 pyodide.FS.mkdir('/py_html');
                 pyodide.FS.mkdir('/py_html/macros');
                 pyodide.FS.mkdir('/py_html/styles');
+                
+                // Create py_dom module structure in Pyodide
+                pyodide.FS.mkdir('/py_dom');
                 
                 // Create scripts module structure in Pyodide
                 pyodide.FS.mkdir('/scripts');
@@ -78,8 +84,20 @@
                     }
                 }
                 
+                // Load each py_dom file
+                for (const file of pyDomFiles) {
+                    try {
+                        const response = await fetch(file);
+                        const content = await response.text();
+                        pyodide.FS.writeFile(`/${file}`, content);
+                        console.log(`Loaded ${file}`);
+                    } catch (error) {
+                        console.warn(`Could not load ${file}:`, error);
+                    }
+                }
+                
                 // Load Python files from scripts folder
-                const pythonFiles = ['scripts/include.py', 'scripts/main.py', 'scripts/__init__.py', 'scripts/about.py'];
+                const pythonFiles = ['scripts/include.py', 'scripts/sci_ux_components.py', 'scripts/main.py', 'scripts/__init__.py', 'scripts/home.py', 'scripts/about.py'];
                 for (const file of pythonFiles) {
                     try {
                         const response = await fetch(file);
@@ -91,29 +109,41 @@
                     }
                 }
                 
-                // Add py_html and scripts to Python path
+                // Add py_html, py_dom and scripts to Python path
                 await pyodide.runPython(`
                     import sys
                     sys.path.insert(0, '/py_html')
+                    sys.path.insert(0, '/py_dom')
                     sys.path.insert(0, '/scripts')
                     sys.path.insert(0, '/')
-                    print("Python path updated with py_html and scripts")
+                    print("Python path updated with py_html, py_dom and scripts")
                 `);
                 
-                // Execute the specific main script for this page
-                const mainScript = 'scripts/main.py';
-                if (pythonFiles.includes(mainScript)) {
+                // Look for and execute main.py from scripts folder or current directory
+                let mainScript = null;
+                if (pythonFiles.includes('scripts/main.py')) {
+                    mainScript = 'scripts/main.py';
+                } else if (pythonFiles.includes('main.py')) {
+                    mainScript = 'main.py';
+                }
+                
+                if (mainScript) {
                     const response = await fetch(mainScript);
                     const mainCode = await response.text();
                     await pyodide.runPython(mainCode);
                     console.log(`Executed ${mainScript}`);
-                } else {
-                    console.warn(`Main script not found: ${mainScript}`);
                 }
                 
                 // Hide loading and show content
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
+                const loadingElement = document.getElementById('loading');
+                const contentElement = document.getElementById('content');
+                
+                if (loadingElement) {
+                    loadingElement.style.display = 'none';
+                }
+                if (contentElement) {
+                    contentElement.style.display = 'block';
+                }
                 
             } catch (error) {
                 console.error('Error loading Pyodide:', error);
