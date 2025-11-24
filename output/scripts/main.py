@@ -6,6 +6,8 @@ from pyodide.ffi import create_proxy
 from sci_ux_components import NavItem, navbar, get_navbar_css
 from home import create_home_content, setup_home_event_handlers
 from about import create_about_content
+from file_explorer_demo import create_file_explorer_demo_content, setup_file_explorer_demo_handlers
+from text_editor_demo import create_text_editor_demo_content, setup_text_editor_demo_handlers
 
 def create_styles():
     # Include navbar styles
@@ -80,6 +82,8 @@ def create_navbar():
     """Create the navigation bar with consistent structure."""
     return navbar([
         NavItem("Home", "home"),
+        NavItem("File Explorer", "file-explorer"),
+        NavItem("Text Editor", "text-editor"),
         NavItem("About", "about"),
         NavItem("Features", "#", children=[
             NavItem("HTML Generation", "home"),
@@ -113,8 +117,8 @@ def render_page_content(page_content):
         html_content = str(full_content)
         js.document.body.innerHTML = html_content
         
-        # Re-setup event handlers after page change
-        setup_event_handlers()
+        # Re-setup event handlers after page change (but skip navigation handlers)
+        setup_page_specific_event_handlers()
             
     except Exception as e:
         print(f"Error rendering page: {e}")
@@ -138,27 +142,92 @@ def render_about():
     about_content = create_about_content()
     render_page_content(about_content)
 
+def render_file_explorer():
+    """Render the file explorer demo page content."""
+    fe_content = create_file_explorer_demo_content()
+    render_page_content(fe_content)
+    # Set up file explorer specific event handlers with a small delay
+    fe_handler_proxy = create_proxy(setup_file_explorer_demo_handlers)
+    js.setTimeout(fe_handler_proxy, 50)
 
-def setup_event_handlers():
+def render_text_editor():
+    """Render the text editor demo page content."""
+    te_content = create_text_editor_demo_content()
+    render_page_content(te_content)
+    # Set up text editor specific event handlers with a small delay
+    te_handler_proxy = create_proxy(setup_text_editor_demo_handlers)
+    js.setTimeout(te_handler_proxy, 50)
+
+
+def setup_page_specific_event_handlers():
+    """Setup event handlers that need to be re-attached after page changes."""
     
     def handle_nav_click(event):
         if event.target.classList.contains('spa-link'):
             event.preventDefault()
             page = event.target.getAttribute('data-page')
-            if page == 'home':
-                render_home()
-            elif page == 'about':
-                render_about()
+            # Use the globally stored navigate function
+            if hasattr(js.window, 'sci_ux_navigate'):
+                js.window.sci_ux_navigate(page)
     
-    # Create proxies
+    # Re-attach handlers to .spa-link elements that were just created
     nav_handler = create_proxy(handle_nav_click)
-    
-    # Set up navigation handlers
     nav_links = js.document.querySelectorAll('.spa-link')
     for link in nav_links:
         link.addEventListener('click', nav_handler)
+    
+    if nav_links.length > 0:
+        print(f"Attached navigation handlers to {nav_links.length} spa-links")  # Debug
+
+def setup_global_navigation_handlers():
+    """Setup navigation handlers that only need to be attached once."""
+    
+    def handle_hash_change(event):
+        # Handle hash-based navigation
+        hash_value = js.window.location.hash.replace('#', '')
+        if hash_value:
+            navigate_to_page(hash_value)
+    
+    def handle_custom_navigation(event):
+        # Handle custom navigation events from components (like file double-click)
+        print(f"Custom navigation event: {event.detail} (handler ID: {id(handle_custom_navigation)})")  # Debug
+        page = event.detail['page']  # Access as dictionary
+        navigate_to_page(page)
+    
+    def navigate_to_page(page):
+        """Navigate to a specific page."""
+        print(f"Navigating to: {page}")  # Debug
+        if page == 'home':
+            render_home()
+        elif page == 'about':
+            render_about()
+        elif page == 'file-explorer':
+            render_file_explorer()
+        elif page == 'text-editor' or page == 'text-editor-open':
+            render_text_editor()
+    
+    # Create proxies
+    hash_handler = create_proxy(handle_hash_change)
+    custom_nav_handler = create_proxy(handle_custom_navigation)
+    
+    # Set up hash change handler
+    js.window.addEventListener('hashchange', hash_handler)
+    
+    # Set up custom navigation handler (only if not already set up)
+    if not hasattr(js.window, '_sci_ux_nav_handler_attached'):
+        js.window.addEventListener('sci-ux-navigate', custom_nav_handler)
+        js.window._sci_ux_nav_handler_attached = True
+        print("Global navigation handler attached")  # Debug
+    else:
+        print("Global navigation handler already attached, skipping")  # Debug
+        
+    # Store the navigate function globally so page handlers can use it
+    js.window.sci_ux_navigate = navigate_to_page
 
 
 # Main execution
 if __name__ == "__main__":
+    # Set up global navigation handlers once
+    setup_global_navigation_handlers()
+    # Render the initial page
     render_home()

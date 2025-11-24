@@ -44,7 +44,7 @@ def init_environment(output_folder: str, scripts_folder: str = "scripts") -> str
     
     return f"Environment setup complete in {output_path}"
 
-def build_page(filename: str, scripts_folder: str = "scripts") -> str:
+def build_page(filename: str, scripts_folder: str = "scripts", additional_directories: list = None) -> str:
     """Generate HTML file with PyHTML environment setup."""
     import os
     import glob
@@ -88,6 +88,20 @@ def build_page(filename: str, scripts_folder: str = "scripts") -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Python UX Application</title>
     <script src="pyodide/pyodide.js"></script>
+    
+    <!-- CodeMirror CSS and JS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -155,6 +169,17 @@ def build_page(filename: str, scripts_folder: str = "scripts") -> str:
                 // Create scripts module structure in Pyodide
                 pyodide.FS.mkdir('/scripts');
                 
+                // Create additional directories dynamically
+                const additionalDirs = {additional_directories or []};
+                for (const dir of additionalDirs) {{
+                    try {{
+                        pyodide.FS.mkdir(dir);
+                        console.log(`Created directory: ${{dir}}`);
+                    }} catch (error) {{
+                        console.warn(`Could not create directory ${{dir}}:`, error);
+                    }}
+                }}
+                
                 // Load each py_html file
                 for (const file of pyHtmlFiles) {{
                     try {{
@@ -193,14 +218,24 @@ def build_page(filename: str, scripts_folder: str = "scripts") -> str:
                 }}
                 
                 // Add py_html, py_dom and scripts to Python path
-                await pyodide.runPython(`
+                let pythonPathSetup = `
                     import sys
                     sys.path.insert(0, '/py_html')
                     sys.path.insert(0, '/py_dom')
-                    sys.path.insert(0, '/scripts')
+                    sys.path.insert(0, '/scripts')`;
+                
+                // Add additional directories to Python path
+                for (const dir of additionalDirs) {{
+                    pythonPathSetup += `
+                    sys.path.insert(0, '${{dir}}')`;
+                }}
+                
+                pythonPathSetup += `
                     sys.path.insert(0, '/')
-                    print("Python path updated with py_html, py_dom and scripts")
-                `);
+                    print("Python path updated with py_html, py_dom and scripts (including detected subdirectories)")
+                `;
+                
+                await pyodide.runPython(pythonPathSetup);
                 
                 // Look for and execute main.py from scripts folder or current directory
                 let mainScript = null;
